@@ -12,7 +12,7 @@
 
 <p align="center">
   <b>适配 Hiveton H5000M（MT7987A + MT7996E + MT5700M）</b><br>
-  集成 QModem Next、经典 QModem、Modem Pro、MT5700 与 MT5700M 五套独立方案，提供一键在线无损 OTA 升级
+  集成 QModem Next、经典 QModem、Modem Pro、MT5700 与 MT5700M 五套独立方案，提供统一 OTA 版本选择与配置保留控制
 </p>
 
 </div>
@@ -26,7 +26,7 @@
   - **`*-qmodem-next`（现代版）**：采用全响应式 JavaScript 现代前端，集成 `sms-forwarder-next` 短信转发中心，交互丝滑。
   - **`*-qmodem`（传统版）**：经典 LuCI 架构与深度汉化界面，配合 `sms-tool` 原生命令行工具，稳定高效。
 - 🛰️ **Modem Pro 统一模组方案**：提供 `H5000M-modem-pro` 独立配置，引入 [modem-pro-unified](https://github.com/LianXia233/modem-pro-unified) 栈——由 Rust 守护进程 `modemd` 原生接管 QMI/MBIM 拨号，搭配 ucode 世代 LuCI 界面，彻底剥离 QModem 冗余组件。
-- 🔄 **硬件级在线 OTA 升级 (`luci-app-online-upgrade`)**：固件内置设备特征唯一锚点，自动识别并匹配对应 Release，支持保留配置无缝一键直升，内置国内加速镜像。
+- 🔄 **硬件级在线 OTA 升级 (`luci-app-online-upgrade`)**：固件内置设备特征唯一锚点，自动识别并匹配对应 Release，同驱动同方案可选保留配置，跨驱动或方案强制清空，内置国内加速镜像。
 - ❄️ **CPE 专属硬件控制套件**：集成 CPU + 基带双温区风扇 PWM 阶梯调速、网络模式秒级切换与双链路故障倒换。
 
 ---
@@ -154,53 +154,17 @@ Modem Pro 的模组管理与风扇均沿用原方案。
 
 ### 1. 固件在线 OTA 升级 (`luci-app-online-upgrade`)
 
-H5000M 五套配置默认内置 v2 版本（Rust 后端 + rpcd 接口），
-源码取自 [LianXia233/luci-app-online-upgrade](https://github.com/LianXia233/luci-app-online-upgrade)：
+H5000M 五套配置内置 [H5000M-OTA](https://github.com/Starktomy/H5000M-OTA) 的定制客户端，基于 LianXia233/gooyjq 的 Rust 2.6.10 版。
 
-- **按机型锁定升级源**：构建期由 `Scripts/OnlineUpgradePreset.sh` 生成
-  `/etc/config/online-upgrade`，其中 `repo` / `tag` / `firmware_pattern` 与本次产物一一对应，
-  按 H5000M 的模组方案与源码分支匹配固件；
-- **资产名精确匹配**：`firmware_pattern` 直接锚定编译配置名
-  （如 `^H5000M-qmodem-next-[0-9]+-sysupgrade\.bin$`）；配置名含模组方案，
-  因此同机型五套变体之间不会互相误匹配；
-- **国内下载加速**：预设 `proxy` 为 `https://gh.acg2.mom/`，配合 Rust 后端的
-  分块并发下载（`dl_workers` / `dl_chunk_mb` / `dl_stall_sec` / `dl_retries`）；
-- **自动重装守卫与安装路径一致**：`90-online-upgrade-auto` 用 `-x /usr/bin/online-upgrade`
-  判定插件是否存在（上游 `98a966a` 已修），避免刷机首启误判「插件丢失」而下载外部
-  `.apk` 覆盖自编二进制；导入脚本按内容幂等校验，并核对 Makefile 安装项、
-  守卫判定、预编译落点三处同为该路径。
-- **固件完整性校验**：`Package Firmware` 在发布前计算每个固件的 SHA256，以标准
-  `sha256sum` 格式写进 Release 正文；上游 `github.rs` 的 `find_sha256_in_text`
-  按资产名取到后执行真实比对，不新增任何资产，与「Release 只留固件」一致；
+- **统一选择版本**：在设备 OTA 页选择开源 mt76 或厂商 SDK mt_wifi7、五套模组方案、日常/稳定通道和历史构建。目录与稳定版由 H5000M-OTA 维护。
+- **同组可选保留配置**：驱动和模组方案完全相同，更新到新日期版本可选择保留；默认清空。跨驱动或跨方案必须清空，旧固件身份未知也必须清空。
+- **后端执行策略**：CI 将真实驱动与方案写入 `/usr/share/h5000m/firmware.json`。刷写前再次核对目标来源；清空模式固定 `sysupgrade -n`，不恢复旧包；同组保留模式先成功备份再使用 `sysupgrade -f`。
+- **持续校验**：SHA256、机型与镜像预检不因切换旧版本或重装而跳过。客户端随固件更新，禁用上游插件自升级与旧包自动重装。
+- **国内下载加速**：保留代理节点和多线程分段下载调优。
 
-五套方案预设对照（`<配置名>` 即 `WRT_CONFIG`，形如 `机型-模组插件`；`<owner>` 为本次编译所用源码仓库 owner）：
+[统一下载页面](https://starktomy.github.io/H5000M-OTA/) · [稳定版发布方法](https://github.com/Starktomy/H5000M-OTA#发布与保留)
 
-| 机型配置 | `tag` | `firmware_pattern` |
-| :--- | :--- | :--- |
-| `H5000M-qmodem` / `-qmodem-next` / `-modem-pro` / `-mt5700` / `-mt5700m` | `latest@^<配置名>-<owner>-<分支>-` | `^<配置名>-[0-9]+-sysupgrade\.bin$` |
-
-说明：
-
-- `tag` 三段锚定 `<配置名>-<owner>-<分支>-`：`H5000M-qmodem` 是
-  `H5000M-qmodem-next` 的字符串前缀，只写 `^H5000M-qmodem-` 会让前者命中后者的
-  发布；再锚定分支可防止同一 owner 换分支编译时跨分支取最新，分支名中的 `.`
-  会转义成 `\.` 再拼进正则；
-- 上游默认配置里的 `enabled` / `keep_config` 在 v2 的 Rust 与 rpcd 代码中**未被读取**，
-  预设不写入这两个键，避免"配了却不起作用"；升级前的配置保留由插件自身逻辑决定；
-- `expected_sha256` 不写进预设：那是「本次 Release 的固定值」，出厂固化会让之后
-  每个版本都拿旧哈希比对；校验依据改由 Release 正文按资产名提供；
-- 上游 `version::pick` 取文本里最后一个点分数字，产物名 `<配置名>-<YYYYMMDD>-...`
-  不含点分版本，会回退到 Release 标签并把末尾 `HH.MM.SS` 构建时间当作版本；
-  是否升级主要由资产 `updated_at` 判定，版本字段仅用于展示与同版本比较，
-  本次按约定未改标签格式。
-
-> [!WARNING]
-> **旧固件 OTA 过渡**：产物改用 `机型-模组插件-编译日期` 命名后，旧固件里固化的
-> `firmware_pattern` 仍是平台前缀式正则（如
-> `^mediatek-filogic-hiveton_h5000m-squashfs-sysupgrade-.*\.bin$`），无法匹配新命名的资产。
-> 已刷入旧固件的设备需**手动下载对应 `*-sysupgrade.bin` 刷一次**，
-> 或先在 LuCI 里把 `firmware_pattern` 改成上表的新正则，
-> 之后即可恢复一键 OTA；新固件出厂预设已是新正则，不受影响。
+已有旧固件首次迁移时，请手动下载带新 OTA 客户端的 sysupgrade，取消“保留配置”后刷入。此前发布的镜像不包含本次改造。
 
 Rust 后端用**官方 Rust SDK**（rustup stable + `aarch64-unknown-linux-musl`）交叉编译，
 链接交给 OpenWrt 工具链的交叉 `gcc`，不经过 OpenWrt SDK 自带的 rust 构建链。
@@ -253,7 +217,7 @@ H5000M 显式使用 `-C target-cpu=cortex-a53`；产物为 aarch64 静态 musl E
 
 每天清理及每次固件发布成功后均执行轮换。失败构建、草稿、未完成上传和无法识别的标签不淘汰已有固件。手动运行 Auto-Clean 可勾选 `dry_run` 预览计划；手动清理不会触发整套编译，定时清理成功后继续联动 MTK-AUTO。
 
-稳定版建议独立发布到 `Starktomy/H5000M-OTA`（规划），同时存放固件文件和 SHA256；索引可同时列出稳定版与两个编译仓库的日常版本。仅链接日常 Release 无法避免原镜像轮换后失效。
+稳定版长期发布到 [Starktomy/H5000M-OTA](https://github.com/Starktomy/H5000M-OTA/releases)，固件文件和 SHA256 复制到该仓库独立保存。统一目录同时列出稳定版和两个编译仓库各组最近 3 个日常版本。
 
 ### 手动构建步骤指引
 

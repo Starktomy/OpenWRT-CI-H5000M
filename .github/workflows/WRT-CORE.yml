@@ -422,7 +422,7 @@ jobs:
             echo "Refreshed firewall4 fullcone patch for 2026.11.08~3722eadc"
           fi
 
-      - name: Import luci-app-online-upgrade (H5000M)
+      - name: Import H5000M-OTA client (catalog and upgrade policy)
         # H5000M 五套方案接入在线升级插件 v2（Rust 后端）。必须在 make defconfig 之前完成，
         # 否则 Config/GENERAL.txt 里的 CONFIG_PACKAGE_luci-app-online-upgrade=y
         # 找不到包而被 Kconfig 丢弃。脚本内部做结构断言与行尾归一化，失败即红。
@@ -799,6 +799,10 @@ jobs:
             模组方案：${{env.WRT_VARIANT}}
             模组插件版本：${{env.H5000M_MODEM_VERSION}}
             风扇插件：${{env.H5000M_FANCONTROL_VERSION}}
+
+            OTA 目录：https://github.com/Starktomy/H5000M-OTA
+            OTA 客户端：${{env.ONLINE_UPGRADE_HASH}}
+            配置保留：仅同驱动＋同模组方案可选保留，跨驱动或方案必须清空
 
             源码：${{env.WRT_REPO}}
             分支：${{env.WRT_BRANCH}}

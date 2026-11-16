@@ -7,22 +7,22 @@
 # 之后交叉编译 Rust 后端（见 WRT-CORE「Precompile online-upgrade Rust Backend」）。
 # 导入与预编译各自独立，WRT-CORE 中按顺序调用，失败点清晰可归因。
 #
-# 上游仓库是「包即仓库根」的形态：Makefile / root/ / rust/ 都在仓库根目录，
-# 因此 clone 后直接把仓库内容搬成 package/luci-app-online-upgrade/，不需要
-# 像 feeds 那样再下钻一层子目录。不加入 feeds：仓库不是 feeds 布局
-# （feeds 要求 <feed>/<包名>/Makefile），硬套 src-git 会扫不到包。
+# 默认使用 H5000M-OTA 中固定维护的定制客户端子目录，统一版本目录与配置保留规则。
+# 不将整个 OTA 仓库当成 LuCI 软件包，也不让通用上游自升级覆盖策略。
 #
 # 用法（在 OpenWrt 源码树的 package/ 目录下执行）：
 #   $GITHUB_WORKSPACE/Scripts/Packages-OnlineUpgrade.sh
 #
 # 环境变量（可选）：
 #   ONLINE_UPGRADE_BRANCH   上游分支，默认 main
-#   ONLINE_UPGRADE_REPO     上游仓库，默认 LianXia233/luci-app-online-upgrade
+#   ONLINE_UPGRADE_REPO     包来源仓库，默认 Starktomy/H5000M-OTA
+#   ONLINE_UPGRADE_SUBDIR   包所在子目录，默认 package/luci-app-online-upgrade
 
 set -euo pipefail
 
 PKG_NAME=luci-app-online-upgrade
-PKG_REPO="${ONLINE_UPGRADE_REPO:-LianXia233/luci-app-online-upgrade}"
+PKG_REPO="${ONLINE_UPGRADE_REPO:-Starktomy/H5000M-OTA}"
+PKG_SUBDIR="${ONLINE_UPGRADE_SUBDIR-package/luci-app-online-upgrade}"
 PKG_BRANCH="${ONLINE_UPGRADE_BRANCH:-main}"
 
 # clone 到临时目录再搬移，避免与目标包目录同名互相覆盖
@@ -42,16 +42,28 @@ if ! git clone --depth=1 --single-branch --branch "${PKG_BRANCH}" \
 		"https://gh.acg2.mom/https://github.com/${PKG_REPO}.git" "./${REPO_DIR}"
 fi
 
-# 发布构建用不到的目录：.git 体积大，.github 是上游 CI
-rm -rf "./${REPO_DIR}/.git" "./${REPO_DIR}/.github"
+OTA_CLIENT_HASH="$(git -C "./${REPO_DIR}" rev-parse HEAD)"
+echo "==> H5000M OTA 客户端来源：${PKG_REPO}@${OTA_CLIENT_HASH}"
+if [ -n "${GITHUB_ENV:-}" ]; then
+    echo "ONLINE_UPGRADE_HASH=${OTA_CLIENT_HASH}" >> "$GITHUB_ENV"
+fi
 
-[ -f "./${REPO_DIR}/Makefile" ] || {
-	echo "::error::${REPO_DIR}/Makefile 不存在：上游仓库布局可能已变更"
-	echo "目录内容：$(ls -A "./${REPO_DIR}" | tr '\n' ' ')"
-	exit 1
+# 克隆后只导入包子目录；空 SUBDIR 可用于兼容“包即仓库根”的布局。
+case "$PKG_SUBDIR" in
+    /*|*..*) echo "::error::ONLINE_UPGRADE_SUBDIR 必须是仓库内相对路径"; exit 1 ;;
+esac
+PKG_SOURCE="./${REPO_DIR}${PKG_SUBDIR:+/$PKG_SUBDIR}"
+[ -f "$PKG_SOURCE/Makefile" ] && [ -f "$PKG_SOURCE/rust/src/h5000m.rs" ] || {
+    echo "::error::${PKG_SOURCE} 缺少 H5000M 定制 OTA 包及升级策略后端"
+    exit 1
 }
-
-mv "./${REPO_DIR}" "./${PKG_NAME}"
+if [ -n "$PKG_SUBDIR" ]; then
+    mv "$PKG_SOURCE" "./${PKG_NAME}"
+    rm -rf "./${REPO_DIR}"
+else
+    rm -rf "./${REPO_DIR}/.git" "./${REPO_DIR}/.github"
+    mv "./${REPO_DIR}" "./${PKG_NAME}"
+fi
 
 # ===== 行尾归一化：CRLF → LF =====
 # 只处理文本类文件。上游若在 Windows 下提交过 uci-defaults / rpcd 脚本，
@@ -126,9 +138,7 @@ grep -q './root/usr/bin/online-upgrade' "./${PKG_NAME}/Makefile" || {
 # 不能硬编码 sed：上游已修复时再改写属于无意义改动，且一旦上游改回或调整行文，
 # 无条件替换会静默失效或被误判为成功。只有真的检出 v1 路径才改写，并双向断言。
 #
-# 时序约束：upgrade.rs 用 include_str! 把该脚本编进二进制（升级时用它重写设备上的
-# /etc/uci-defaults/90-online-upgrade-auto），所以改写必须发生在 cargo build 之前。
-# WRT-CORE 中「Import」步骤排在「Precompile Rust Backend」之前，顺序不可调换。
+# 定制版的该脚本仅作兼容性检查，不联网重装、不恢复旧包；仍校验真实二进制路径。
 AUTO_UCI="./${PKG_NAME}/root/etc/uci-defaults/90-online-upgrade-auto"
 V2_BIN='/usr/bin/online-upgrade'
 V1_BIN='/usr/bin/online-upgrade.sh'

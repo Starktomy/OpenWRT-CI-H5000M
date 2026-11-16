@@ -18,8 +18,8 @@
 #   rust/src/github.rs       repo / tag / proxy / firmware_pattern / min_size_mb
 #   rust/src/downloader.rs   dl_workers / dl_chunk_mb / dl_stall_sec / dl_retries
 #   rust/src/upgrade.rs      expected_sha256（自定义校验值，留空则用 Release 的）
-# 上游默认配置里的 enabled / keep_config / last_upgrade_version 在本版本 Rust 与
-# rpcd 代码中均未被读取，故不写入预设，避免「配了却不起作用」的假象。
+# 定制后端读取 keep_config；默认清空配置。用户通过目录选择器仅可在同驱动、
+# 同模组方案时显式选择保留，刷写前后端会再次核对真实当前身份。
 #
 # SHA256 不写进预设：expected_sha256 是「本次 Release 的固定值」，出厂固化会让
 # 之后每个版本都拿旧哈希去比对。WRT-CORE 改为把每个固件的 sha256sum 写进
@@ -90,15 +90,17 @@ mkdir -p "$(dirname "$TARGET")"
 	printf "\toption min_size_mb '15'\n"
 	printf "\toption proxy 'https://gh.acg2.mom/'\n"
 	printf "\toption expected_sha256 ''\n"
+	printf "\toption keep_config '0'\n"
+	printf "\toption plugin_repo 'Starktomy/H5000M-OTA'\n"
 	printf "\toption dl_workers '6'\n"
 	printf "\toption dl_chunk_mb '4'\n"
 	printf "\toption dl_stall_sec '30'\n"
 	printf "\toption dl_retries '3'\n"
 } > "$TARGET"
 
-# 生成后自检：10 个键一个不少，且关键项与推导值一致。
+# 生成后自检：12 个键一个不少，且关键项与推导值一致。
 # 任何一项不匹配都说明模板被改坏，直接红掉而不是带着坏预设编译。
-EXPECT_KEYS=10
+EXPECT_KEYS=12
 GOT_KEYS=$(grep -c '^[[:space:]]*option ' "$TARGET" || true)
 if [ "$GOT_KEYS" -ne "$EXPECT_KEYS" ]; then
 	echo "::error::${TARGET} 生成异常：期望 ${EXPECT_KEYS} 个 option，实际 ${GOT_KEYS}"
@@ -131,3 +133,28 @@ if [[ ! "$SAMPLE_TAG" =~ ${TAG#latest@} ]]; then
 fi
 
 echo "==> 在线升级预设：机型=${WRT_CONFIG} tag正则=${TAG} 资产正则=${PATTERN}"
+
+# 当前固件身份写在 /usr/share，普通配置备份不会把旧固件的身份带入新系统。
+ONLINE_UPGRADE_SOURCE_REPO="$UPGRADE_REPO" WRT_CONFIG="$WRT_CONFIG" WRT_INFO="$WRT_INFO" WRT_BRANCH="$WRT_BRANCH" python3 - <<'IDENTITY_PY'
+import json
+import os
+from pathlib import Path
+repo = os.environ.get('ONLINE_UPGRADE_SOURCE_REPO') or ('Starktomy/CloseWRT-CI-H5000M' if os.environ.get('WRT_BRANCH') == '25.12-dev-wifi7' else 'Starktomy/OpenWRT-CI-H5000M')
+branch = os.environ.get('WRT_BRANCH', '')
+if repo == 'Starktomy/CloseWRT-CI-H5000M' and branch == '25.12-dev-wifi7':
+    driver = 'mt_wifi7'
+elif repo == 'Starktomy/OpenWRT-CI-H5000M' and (os.environ.get('WRT_INFO'), branch) in {('immortalwrt', 'master'), ('VIKINGYFY', 'owrt'), ('chasey-dev', '25.12')}:
+    driver = 'mt76'
+else:
+    raise SystemExit('Unsupported firmware source: cannot assign Wi-Fi driver identity')
+value = {
+    'schema_version': 1, 'device': 'hiveton,h5000m', 'driver': driver,
+    'variant': os.environ['WRT_CONFIG'].removeprefix('H5000M-'),
+    'version': os.environ.get('WRT_DATE', ''), 'source_repo': os.environ.get('WRT_SOURCE', ''),
+    'source_branch': branch, 'ci_repo': repo, 'ota_client_commit': os.environ.get('ONLINE_UPGRADE_HASH', ''),
+}
+path = Path('files/usr/share/h5000m/firmware.json')
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
+print('Firmware identity:', value['driver'], value['variant'])
+IDENTITY_PY
