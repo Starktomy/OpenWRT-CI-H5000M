@@ -817,6 +817,15 @@ jobs:
             插件列表：${{env.WRT_LIST}}
             ${{env.WRT_SHA256_TABLE}}
 
+      # 发布成功后再轮换，新增第 4 版时及时淘汰最旧一版；失败构建不触发。
+      - name: Retain Latest 3 Firmware Releases
+        if: env.WRT_TEST != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/.github/scripts/release-retention.py" \
+            --repo "$GITHUB_REPOSITORY" --config "$WRT_CONFIG" --apply
+
       # save-always 已弃用且行为不可靠，改为独立的 restore/save 两步。
       # save 放在作业末尾并用 always()，保留「即使前面步骤失败也保存缓存」的语义；
       # key 复用 restore 解析出的主键，确保与恢复时的键完全一致。

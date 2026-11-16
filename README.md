@@ -238,7 +238,7 @@ H5000M 显式使用 `-C target-cpu=cortex-a53`；产物为 aarch64 静态 musl E
 | :--- | :--- | :--- |
 | **`WRT-BUILD.yml`** | 手动 `workflow_dispatch` | 自定义按需编译：选择 H5000M 模组方案（Next / 传统版 / Modem Pro / MT5700 / MT5700M），支持 `TEST=true` 生成并检查配置 |
 | **`MTK-AUTO.yml`** | 每日定时 / 联动触发 | 自动构建并并行发布 H5000M 的全部五方案固件 |
-| **`Auto-Clean.yml`** | 每日定时 05:00 (CST) | 默认清空 Release，手动触发可选择按配置保留最新版本；清理过期 Tag 与 30 天以前的 Actions 日志 |
+| **`Auto-Clean.yml`** | 每日定时 05:00 (CST) | 每种驱动 × 每套方案保留最近 3 版，清理超额 Release / Tag 和 30 天以前的 Actions 日志；支持只预览 |
 | **`Cache-Clean.yml`** | 手动 | 回收 Actions 编译缓存 |
 
 > 所有作业统一运行在 `ubuntu-26.04`。`ubuntu-latest` 自 2026-10-19 起滚动迁移到
@@ -246,6 +246,14 @@ H5000M 显式使用 `-C target-cpu=cortex-a53`；产物为 aarch64 静态 musl E
 > `init_build_environment.sh` 仅识别到 `noble`，初始化步骤会注入兼容补丁把脚本内
 > 代号映射为 `noble`，复用已验证的 GCC 13 / LLVM 23 工具链参数集，避免
 > `Unsupported OS` 直接退出。
+
+### 固件历史保留
+
+每种无线驱动（mt76 / mt_wifi7）、每套模组方案各保留最近 **3** 个完整固件 Release，按发布时间排序；同一驱动的不同源码共用名额。当前默认矩阵为 mt76 五套，正常保留至多 15 个日常构建版本；SDK 仓库独立保留另外五套。
+
+每天清理及每次固件发布成功后均执行轮换。失败构建、草稿、未完成上传和无法识别的标签不淘汰已有固件。手动运行 Auto-Clean 可勾选 `dry_run` 预览计划；手动清理不会触发整套编译，定时清理成功后继续联动 MTK-AUTO。
+
+稳定版建议独立发布到 `Starktomy/H5000M-OTA`（规划），同时存放固件文件和 SHA256；索引可同时列出稳定版与两个编译仓库的日常版本。仅链接日常 Release 无法避免原镜像轮换后失效。
 
 ### 手动构建步骤指引
 

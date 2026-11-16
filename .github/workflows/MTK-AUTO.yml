@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 定时自动编译：Auto-Clean 清理完成后自动构建设备固件
+# 定时自动编译：Auto-Clean 定时清理成功后自动构建设备固件
 name: MTK-AUTO
 
 on:
-  # Auto-Clean 完成后自动触发
+  # 仅定时清理成功后自动触发；手动清理/预览不会重复编译。
   workflow_run:
     workflows: ["Auto-Clean"]
     types:
@@ -22,6 +22,9 @@ permissions: write-all
 
 jobs:
   config:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'schedule' && github.event.workflow_run.conclusion == 'success')
     name: ${{ matrix.CONFIG }}
     strategy:
       fail-fast: false
