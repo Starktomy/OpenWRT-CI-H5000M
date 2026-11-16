@@ -4,9 +4,10 @@
 name: Auto-Clean
 
 on:
-  # 每天 UTC 21:00（北京时间次日 05:00）清理，成功后联动 MTK-AUTO。
+  # 北京时间每月双数日 05:00 清理，成功后联动 MTK-AUTO 构建五套方案。
   schedule:
-    - cron: 0 21 * * *
+    - cron: '0 5 2-30/2 * *'
+      timezone: Asia/Shanghai
   workflow_dispatch:
     inputs:
       dry_run:

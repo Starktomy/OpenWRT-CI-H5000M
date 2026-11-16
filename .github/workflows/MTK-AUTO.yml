@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (C) 2026 VIKINGYFY
 
-# 定时自动编译：Auto-Clean 定时清理成功后自动构建设备固件
+# 定时自动编译：北京时间每月双数日 05:00，Auto-Clean 清理成功后构建五套方案
 name: MTK-AUTO
 
 on:
