@@ -279,3 +279,5 @@ OpenWRT-CI-H5000M/
 ---
 
 > 📜 **许可协议**：本项目基于 [GNU General Public License v3.0 (GPL-3.0)](LICENSE) 协议发布。
+
+全部五套方案默认不安装 Samba4（服务、客户端、工具和 LuCI 页面）；构建检查会拒绝额外配置或依赖重新选入 Samba4。

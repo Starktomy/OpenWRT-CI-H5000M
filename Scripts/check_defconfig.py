@@ -185,6 +185,13 @@ class Checker:
             self.forbid("CONFIG_PACKAGE_qmodem-sipd", "qmodem-sipd 仅为 RECOMMENDS")
 
     def check_device(self):
+        for symbol, value in self.actual.items():
+            if value in ("y", "m") and (
+                symbol.startswith("CONFIG_PACKAGE_samba4")
+                or symbol == "CONFIG_PACKAGE_luci-app-samba4"
+                or symbol.startswith("CONFIG_PACKAGE_luci-i18n-samba4-")
+            ):
+                self.errors.append(f"{symbol} 不应编入固件：所有方案禁用 Samba4")
         self.require("CONFIG_TARGET_MULTI_PROFILE", "按设备选择 profile 所必需")
 
         if self.name in ("H5000M-qmodem", "H5000M-qmodem-next", "H5000M-modem-pro", "H5000M-mt5700", "H5000M-mt5700m"):
